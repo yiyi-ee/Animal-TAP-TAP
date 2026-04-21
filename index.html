@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Animal TAP TAP</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  background: #0a0c14;
+  color: #fff;
+  overflow: hidden;
+  transition: background 0.3s;
+}
+
+body.fury { background: #4a0000; }
+
+#startScreen, #gameOverScreen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(10, 12, 20, 0.95);
+  z-index: 100;
+  text-align: center;
+}
+
+#gameOverScreen { display: none; }
+
+.startBtn, .againBtn {
+  padding: 14px 26px;
+  border: none;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: bold;
+  background: #4facfe;
+  color: #000;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+#countdown {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 90px;
+  font-weight: bold;
+  opacity: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.game-container {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.play-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+}
+
+.status-bar {
+  text-align: center;
+}
+
+#card { 
+  font-size: 100px; 
+  height: 120px; 
+  line-height: 120px;
+}
+
+.controls {
+  display: flex;
+  gap: 15px;
+  width: 280px; 
+  height: 70px;
+  margin-top: 50px;
+}
+
+.btn {
+  flex: 1;
+  border: none;
+  border-radius: 0; 
+  font-size: 24px;
+  background: #333;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn:active { background: #555; }
+
+#hearts { font-size: 24px; color: #ff4d4d; }
+#score, #combo { font-size: 20px; font-weight: bold; }
+.final-score { font-size: 32px; margin: 10px 0; color: #4facfe; }
+
+#combo.reset-anim {
+  color: #ff4d4d;
+  transform: scale(1.2);
+  transition: 0.2s;
+}
+</style>
+</head>
+
+<body>
+
+<div id="startScreen">
+  <h2>🐾 Animal TAP TAP</h2>
+  <div class="guide">
+    🐰 🐼 = ⬅️<br>
+    🐻 🐱 = ➡️<br>
+    🐸 🐍 = ⛔️<br><br>
+  </div>
+  <button class="startBtn" onclick="start()">START</button>
+</div>
+
+<div id="gameOverScreen">
+  <h1>GAME OVER</h1>
+  <div class="final-score" id="finalScore">Score: 0</div>
+  <button class="againBtn" onclick="restart()">AGAIN</button>
+</div>
+
+<div id="countdown"></div>
+
+<div class="game-container">
+  <div class="play-area">
+    <div class="status-bar">
+      <div id="hearts">❤️❤️❤️❤️❤️</div>
+      <div id="score">Score: 0</div>
+      <div id="combo">Combo: 0</div>
+    </div>
+    
+    <div id="card">-</div>
+
+    <div class="controls">
+      <button class="btn" onclick="handleInput('left')">⬅️</button>
+      <button class="btn" onclick="handleInput('none')">⛔️</button>
+      <button class="btn" onclick="handleInput('right')">➡️</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let seq = [];
+let i = 0;
+let lives = 5;
+let score = 0;
+let combo = 0;
+let fury = false;
+let idleTimer = null;
+
+const easy = [{n:"🐰",s:"left"},{n:"🐻",s:"right"}];
+const mid = [{n:"🐰",s:"left"},{n:"🐼",s:"left"},{n:"🐻",s:"right"},{n:"🐱",s:"right"}];
+const hard = [{n:"🐰",s:"left"},{n:"🐼",s:"left"},{n:"🐻",s:"right"},{n:"🐱",s:"right"},{n:"🐸",s:"none"},{n:"🐍",s:"none"}];
+
+function start() {
+  document.getElementById("startScreen").style.display = "none";
+  document.getElementById("gameOverScreen").style.display = "none";
+  runCountdown();
+}
+
+function restart() {
+  lives = 5;
+  score = 0;
+  combo = 0;
+  fury = false;
+  seq = [];
+  clearTimeout(idleTimer);
+  updateUI();
+  checkFuryReset();
+  document.getElementById("gameOverScreen").style.display = "none";
+  runCountdown();
+}
+
+function runCountdown() {
+  let cd = document.getElementById("countdown");
+  cd.style.opacity = "1";
+  let num = 3;
+  cd.innerText = num;
+  let t = setInterval(() => {
+    num--;
+    if (num > 0) {
+      cd.innerText = num;
+    } else if (num === 0) {
+      cd.innerText = "GO!";
+    } else {
+      clearInterval(t);
+      cd.style.opacity = "0";
+      setTimeout(() => { initGame(); }, 300);
+    }
+  }, 700);
+}
+
+function initGame() {
+  updateUI();
+  next();
+}
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if (lives > 0) {
+      combo = 0;
+      checkFuryReset();
+      updateUI();
+      const comboEl = document.getElementById("combo");
+      comboEl.classList.add("reset-anim");
+      setTimeout(() => comboEl.classList.remove("reset-anim"), 500);
+    }
+  }, 5000); 
+}
+
+function getPool() {
+  if (score >= 300) return hard;
+  if (score >= 100) return mid;
+  return easy;
+}
+
+function addScore() {
+  let bonus = Math.floor(combo / 10) * 10;
+  let add = 10 + bonus;
+  if (fury) {
+    add *= 10;
+  }
+  score += add;
+}
+
+function checkFury() {
+  if (combo >= 100 && !fury) {
+    fury = true;
+    document.body.classList.add("fury");
+  }
+}
+
+function checkFuryReset() {
+  if (combo < 100 && fury) {
+    fury = false;
+    document.body.classList.remove("fury");
+  }
+}
+
+function next() {
+  let pool = getPool();
+  let c = pool[Math.floor(Math.random() * pool.length)];
+  seq.push(c);
+  document.getElementById("card").innerText = c.n;
+  i = seq.length - 1;
+  resetIdleTimer();
+}
+
+function handleInput(dir) {
+  if (lives <= 0) return;
+  let c = seq[i];
+  if (!c) return;
+
+  if (c.s === dir) {
+    combo++;
+    addScore();
+    checkFury();
+    updateUI();
+    next();
+  } else {
+    lose();
+  }
+}
+
+function lose() {
+  lives--;
+  combo = 0;
+  checkFuryReset();
+  updateUI();
+  if (lives <= 0) {
+    clearTimeout(idleTimer);
+    showGameOver();
+  } else {
+    next();
+  }
+}
+
+function showGameOver() {
+  document.getElementById("finalScore").innerText = "Final Score: " + score;
+  document.getElementById("gameOverScreen").style.display = "flex";
+  document.getElementById("card").innerText = "-";
+}
+
+function updateUI() {
+  document.getElementById("score").innerText = "Score: " + score;
+  document.getElementById("combo").innerText = "Combo: " + combo;
+  let h = "";
+  for (let x = 0; x < 5; x++) h += x < lives ? "❤️" : "🤍";
+  document.getElementById("hearts").innerText = h;
+}
+</script>
+
+</body>
+</html>
